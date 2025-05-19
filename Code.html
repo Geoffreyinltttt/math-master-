@@ -1,0 +1,59 @@
+idField, type);
+    } catch (error) {
+      Logger.log('處理圖片欄位時發生錯誤: ' + error.toString());
+      return '';
+    }
+  }
+  return idField ? String(idField) : '';
+}
+
+function getImageUrl(fileId, type = 'question') {
+  if (!fileId) return null;
+
+  try {
+    // 根據類型返回不同尺寸的圖片
+    switch(type) {
+      case 'option':
+        return `https://drive.google.com/thumbnail?id=${fileId}&sz=w300`;
+      case 'question':
+      case 'explanation':
+      default:
+        return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+    }
+  } catch (error) {
+    Logger.log('獲取圖片 URL 時發生錯誤: ' + error.toString());
+    return null;
+  }
+}
+
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+function saveCompletedRounds(unit, round) {
+  try {
+    const userProperties = PropertiesService.getUserProperties();
+    const completedKey = `completed_${unit}`;
+    userProperties.setProperty(completedKey, round.toString());
+    return { success: true };
+  } catch (error) {
+    Logger.log('儲存回合記錄時發生錯誤: ' + error.toString());
+    return { success: false, error: error.toString() };
+  }
+}
+
+function getCompletedRounds(unit) {
+  try {
+    const userProperties = PropertiesService.getUserProperties();
+    const completedKey = `completed_${unit}`;
+    const completed = userProperties.getProperty(completedKey);
+    return { success: true, rounds: completed ? parseInt(completed) : 0 };
+  } catch (error) {
+    Logger.log('讀取回合記錄時發生錯誤: ' + error.toString());
+    return { success: false, error: error.toString() };
+  }
+}
