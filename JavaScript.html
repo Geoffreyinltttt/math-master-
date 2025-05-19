@@ -1,0 +1,413 @@
+React.useEffect(() => {
+        if (!globalQuizData || !globalQuizData.questions) return;
+        
+        if (!isRetrying) {
+            selectNewQuestions();
+        }
+    }, [topic]);
+
+    // 從可用題目中隨機選擇5道新題目
+    const selectNewQuestions = () => {
+        setLoading(true);
+        try {
+            // 獲取當前主題的所有題目
+            let allQuestions = [];
+            
+            // 從回合1中獲取題目（可以根據需要修改回合選擇邏輯）
+            if (globalQuizData.questions[topic] && globalQuizData.questions[topic][1]) {
+                allQuestions = globalQuizData.questions[topic][1];
+            }
+            
+            // 如果找不到題目，顯示錯誤
+            if (!allQuestions || allQuestions.length === 0) {
+                console.error(`找不到主題 ${topic} 的題目`);
+                setLoading(false);
+                return;
+            }
+            
+            // 如果所有題目都已被使用，重置已使用索引
+            if (usedQuestionIndexes.length >= allQuestions.length) {
+                setUsedQuestionIndexes([]);
+            }
+
+            // 從未使用的題目中隨機選擇5道題目
+            const unusedIndexes = [...Array(allQuestions.length).keys()]
+                .filter(index => !usedQuestionIndexes.includes(index));
+            
+            // 隨機打亂未使用的索引並取前5個（或少於5個如果不足5個）
+            const shuffledUnusedIndexes = [...unusedIndexes].sort(() => Math.random() - 0.5);
+            const numQuestionsToSelect = Math.min(5, shuffledUnusedIndexes.length);
+            const selectedIndexes = shuffledUnusedIndexes.slice(0, numQuestionsToSelect);
+            
+            // 創建包含選定題目的數組
+            const newQuestions = selectedIndexes.map(index => {
+                const originalQuestion = allQuestions[index];
+                // 轉換題目格式以適應UI組件
+                return {
+                    ...convertQuestionFormat(originalQuestion),
+                    originalIndex: index // 保存原始索引以便稍後標記為已使用
+                };
+            });
+            
+            setCurrentSetOfQuestions(newQuestions);
+            setCurrentQuestionIndex(0);
+            setSelectedAnswer(null);
+            setShowFeedback(false);
+            setShowExplanation(false);
+            setCorrectAnswers(0);
+            setWrongQuestions([]);
+            setQuizComplete(false);
+            setLoading(false);
+        } catch (error) {
+            console.error('選擇新題目時發生錯誤:', error);
+            setLoading(false);
+        }
+    };
+
+    const handleAnswerClick = (option) => {
+        if (showFeedback) return;
+        setSelectedAnswer(option);
+        setShowFeedback(true);
+        
+        const currentQuestion = currentSetOfQuestions[currentQuestionIndex];
+        if (option === currentQuestion.correctAnswer) {
+            setCorrectAnswers(prevCount => prevCount + 1);
+        } else {
+            // 記錄錯誤的問題
+            setWrongQuestions(prev => [...prev, currentQuestion]);
+        }
+    };
+
+    const nextQuestion = () => {
+        if (selectedAnswer === null) {
+            alert('請先回答當前問題！');
+            return;
+        }
+        
+        // 如果不是在重試模式，將當前問題標記為已使用
+        if (!isRetrying) {
+            const currentQuestion = currentSetOfQuestions[currentQuestionIndex];
+            setUsedQuestionIndexes(prev => [...prev, currentQuestion.originalIndex]);
+        }
+        
+        if (currentQuestionIndex < currentSetOfQuestions.length - 1) {
+            // 還有更多問題
+            setCurrentQuestionIndex(currentQuestionIndex + 1);
+            setSelectedAnswer(null);
+            setShowFeedback(false);
+            setShowExplanation(false);
+        } else {
+            // 完成當前組的所有問題
+            setQuizComplete(true);
+        }
+    };
+
+    const startNextSet = () => {
+        setIsRetrying(false);
+        selectNewQuestions();
+    };
+    
+    const retryWrongQuestions = () => {
+        if (wrongQuestions.length > 0) {
+            setCurrentSetOfQuestions(wrongQuestions);
+            setCurrentQuestionIndex(0);
+            setSelectedAnswer(null);
+            setShowFeedback(false);
+            setShowExplanation(false);
+            setCorrectAnswers(0);
+            setWrongQuestions([]);
+            setQuizComplete(false);
+            setIsRetrying(true);
+        }
+    };
+
+    if (loading) {
+        return <div className="p-8 max-w-2xl mx-auto text-center">載入題目中...</div>;
+    }
+
+    if (quizComplete) {
+        return (
+            <div className="p-6 max-w-md mx-auto">
+                <div className="bg-white p-6 rounded-xl border border-pink-100 shadow-sm mb-6">
+                    <h2 className="text-xl font-bold mb-4 text-center text-gray-800">
+                        {isRetrying ? "您已完成錯題練習。" : "您已完成本組題目的測驗"}
+                    </h2>
+                    
+                    <div className="flex items-center justify-center mb-6">
+                        <div className="w-32 h-32 rounded-full bg-gradient-to-r from-pink-500/10 to-yellow-400/10 flex items-center justify-center">
+                            <div className="w-24 h-24 rounded-full bg-gradient-to-r from-pink-500/20 to-yellow-400/20 flex items-center justify-center">
+                                <div className="text-center">
+                                    <span className="block text-3xl font-bold bg-gradient-to-r from-pink-500 to-yellow-400 bg-clip-text text-transparent">{correctAnswers}/{currentSetOfQuestions.length}</span>
+                                    <span className="text-sm text-gray-500">答對題數</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <p className="text-lg mb-4 text-center text-gray-600">
+                        您總共答對了 {correctAnswers} 題，共 {currentSetOfQuestions.length} 題
+                    </p>
+                </div>
+                
+                {wrongQuestions.length > 0 && !isRetrying && (
+                    <button onClick={retryWrongQuestions} className="w-full mb-3 py-3 px-4 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white rounded-lg font-medium hover:shadow-md transform hover:-translate-y-0.5 transition-all duration-300">
+                        <span className="flex items-center justify-center">
+                            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            錯題再來一次
+                        </span>
+                    </button>
+                )}
+                
+                <button onClick={startNextSet} className="w-full mb-3 py-3 px-4 bg-gradient-to-r from-pink-500 to-pink-600 text-white rounded-lg font-medium hover:shadow-md transform hover:-translate-y-0.5 transition-all duration-300">
+                    <span className="flex items-center justify-center">
+                        <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        繼續新題目
+                    </span>
+                </button>
+                
+                <button onClick={() => onFinish('topics')} className="w-full mb-3 py-3 px-4 bg-gradient-to-r from-pink-400 to-yellow-400 text-white rounded-lg font-medium hover:shadow-md transform hover:-translate-y-0.5 transition-all duration-300">
+                    <span className="flex items-center justify-center">
+                        <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                        選擇新單元
+                    </span>
+                </button>
+                
+                <button onClick={() => onFinish('home')} className="w-full py-3 px-4 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 hover:shadow-sm transform hover:-translate-y-0.5 transition-all duration-300">
+                    <span className="flex items-center justify-center">
+                        <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                        </svg>
+                        回到首頁
+                    </span>
+                </button>
+            </div>
+        );
+    }
+
+    // 無題目或當前組無題目時顯示
+    if (!currentSetOfQuestions.length) {
+        return <div className="p-4 text-center">正在準備題目...</div>;
+    }
+
+    const progress = ((currentQuestionIndex + 1) / currentSetOfQuestions.length) * 100;
+    const currentQ = currentSetOfQuestions[currentQuestionIndex];
+
+    return (
+        <div className="p-6 max-w-md mx-auto relative">
+            <div className="mb-4 bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                <div 
+                    className="bg-gradient-to-r from-pink-500 to-yellow-400 h-2.5 rounded-full transition-all duration-300" 
+                    style={{width: `${progress}%`}}
+                ></div>
+            </div>
+
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-gray-800">{topic}</h2>
+                <div className="flex space-x-3">
+                    <span className="bg-gradient-to-r from-pink-100 to-yellow-100 text-pink-600 px-3 py-1 rounded-full text-sm font-medium">
+                        {currentQuestionIndex + 1} / {currentSetOfQuestions.length}
+                    </span>
+                    <button 
+                        onClick={() => setShowExplanation(!showExplanation)}
+                        className={`text-yellow-400 hover:text-yellow-500 ${showExplanation ? 'text-pink-500' : ''}`}
+                    >
+                        <i className="fas fa-lightbulb text-2xl"></i>
+                    </button>
+                </div>
+            </div>
+
+            {/* 題目類型提示 */}
+            <div className="mb-3">
+                <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
+                    currentQ.type === 'multipleChoice' 
+                        ? 'bg-gradient-to-r from-pink-100 to-pink-200 text-pink-700' 
+                        : 'bg-gradient-to-r from-green-100 to-green-200 text-green-700'
+                }`}>
+                    {currentQ.type === 'multipleChoice' ? '選擇題' : '是非題'}
+                </span>
+            </div>
+
+            {/* 顯示問題 */}
+            {Array.isArray(currentQ.question) ? (
+                // 如果問題是數組（多張圖片）
+                currentQ.question.map((questionImg, index) => (
+                    <img 
+                        key={index}
+                        src={questionImg} 
+                        alt={`題目圖片 ${index + 1}`} 
+                        className="mb-2 mx-auto max-w-full border border-pink-100 rounded-lg"
+                    />
+                ))
+            ) : (
+                // 單張圖片
+                <img 
+                    src={currentQ.question} 
+                    alt="題目" 
+                    className="mb-4 mx-auto max-w-full border border-pink-100 rounded-lg"
+                />
+            )}
+
+            {/* 根據題目類型顯示不同選項 */}
+            {currentQ.type === 'multipleChoice' && (
+                <InteractiveOptionSelector
+                    optionsImage={currentQ.optionsImage}
+                    onSelect={handleAnswerClick}
+                    correctAnswer={currentQ.correctAnswer}
+                    showFeedback={showFeedback}
+                    selectedOption={selectedAnswer}
+                />
+            )}
+
+            {currentQ.type === 'trueFalse' && (
+                <TrueFalseSelector
+                    onSelect={handleAnswerClick}
+                    correctAnswer={currentQ.correctAnswer}
+                    showFeedback={showFeedback}
+                    selectedOption={selectedAnswer}
+                />
+            )}
+
+            {showExplanation && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowExplanation(false)}>
+                    <div className="bg-white p-6 rounded-lg max-w-sm mx-auto" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-2">
+                            <h3 className="font-bold text-lg text-pink-500">解析：</h3>
+                            <button 
+                                onClick={() => setShowExplanation(false)}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <img src={currentQ.explanation} alt="解析" className="mx-auto max-w-full rounded-lg border border-gray-200" />
+                    </div>
+                </div>
+            )}
+
+            <button
+                onClick={nextQuestion}
+                className="w-full mt-6 py-3 bg-gradient-to-r from-pink-500 to-yellow-400 text-white rounded-lg font-medium hover:shadow-md transform hover:-translate-y-0.5 transition-all duration-300"
+            >
+                {currentQuestionIndex === currentSetOfQuestions.length - 1 ? '完成' : '下一題'}
+            </button>
+        </div>
+    );
+}
+
+// App 組件 - 主應用
+function App() {
+    const [currentPage, setCurrentPage] = React.useState('loading');
+    const [selectedTopic, setSelectedTopic] = React.useState(null);
+
+    // 初始化時從服務器獲取題目數據
+    React.useEffect(() => {
+        const loadingElement = document.getElementById('loading');
+        if (loadingElement) loadingElement.style.display = 'block';
+
+        // 調用 Google Apps Script 函數獲取題目數據
+        google.script.run
+            .withSuccessHandler(function(data) {
+                console.log('載入數據成功');
+                globalQuizData = data;
+                setCurrentPage('home');
+                
+                if (loadingElement) loadingElement.style.display = 'none';
+            })
+            .withFailureHandler(function(error) {
+                console.error('載入數據失敗:', error);
+                alert('載入數據失敗：' + error);
+                
+                if (loadingElement) loadingElement.style.display = 'none';
+            })
+            .getQuizData();
+    }, []);
+
+    const handleStartQuiz = () => {
+        setCurrentPage('topics');
+    };
+
+    const handleSelectTopic = (topic) => {
+        setSelectedTopic(topic);
+        setCurrentPage('quiz');
+    };
+
+    const handleFinishQuiz = (destination) => {
+        if (destination === 'home') {
+            setCurrentPage('home');
+        } else if (destination === 'topics') {
+            setCurrentPage('topics');
+        }
+        setSelectedTopic(null);
+    };
+
+    // 顯示加載中畫面
+    if (currentPage === 'loading') {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-pink-200 border-t-pink-500 rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-pink-500 text-lg">載入中，請稍候...</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen bg-white">
+            <header className="bg-white border-b border-pink-100 shadow-sm">
+                <div className="max-w-6xl mx-auto px-6 py-3">
+                    <div className="flex items-center">
+                        <div className="w-20">
+                            {currentPage !== 'home' && (
+                                <button 
+                                    onClick={() => setCurrentPage('home')}
+                                    className="flex items-center space-x-2 text-gray-500 hover:text-pink-500 transition-colors"
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                    <div className="flex flex-col text-sm leading-tight">
+                                        <span>返回</span>
+                                        <span>首頁</span>
+                                    </div>
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex-1 flex items-center justify-center">
+                            <div className="flex items-center space-x-4">
+                                <h1 className="text-2xl font-bold gradient-text">技高數學你多會</h1>
+                            </div>
+                        </div>
+                        <div className="w-20"></div>
+                    </div>
+                </div>
+            </header>
+
+            <div className="flex-grow">
+                {currentPage === 'home' && <HomePage onStartQuiz={handleStartQuiz} />}
+                {currentPage === 'topics' && <TopicSelection onSelectTopic={handleSelectTopic} onBack={() => setCurrentPage('home')} />}
+                {currentPage === 'quiz' && <Quiz topic={selectedTopic} onFinish={handleFinishQuiz} />}
+            </div>
+            
+            <footer className="py-4 px-6 text-center text-sm text-gray-500 border-t border-pink-100 mt-8">
+                <p>Longteng Education Co., Ltd. All rights reserved</p>
+                <p>版權所有龍騰文化事業股份有限公司</p>
+            </footer>
+        </div>
+    );
+}
+
+// 在頁面載入完成後，初始化React應用
+window.onload = function() {
+    console.log('頁面載入完成，初始化React應用...');
+    ReactDOM.render(<App />, document.getElementById('app'));
+};
+</script>
